@@ -1,10 +1,9 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.http import HttpResponseRedirect
 from django.contrib import messages
-
-from main.models import Book, Order, User
-from login.models import Manager
+from .models import User,Manager
 import hashlib
+
 
 def getmd5(s):
     s += 'orzyadie'
@@ -12,176 +11,91 @@ def getmd5(s):
     md.update(s.encode('utf-8'))
     return md.hexdigest()
 
-def bookManage(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    books = Book.objects.all()
-    if request.method == 'POST':
-        if 'search' in request.POST:
-            search_type = request.POST.get('search_type')
-            if search_type == 'name':
-                book_name = request.POST.get('book_name')
-                if book_name:
-                    books = books.filter(bname__icontains=book_name)
-            elif search_type == 'price':
-                min_price = request.POST.get('min_price')
-                max_price = request.POST.get('max_price')
-                if min_price and max_price:
-                    books = books.filter(price__gte=min_price, price__lte=max_price)
-                elif min_price:
-                    books = books.filter(price__gte=min_price)
-                elif max_price:
-                    books = books.filter(price__lte=max_price)
-            elif search_type == 'combined':
-                min_overplus = request.POST.get('min_overplus')
-                min_price = request.POST.get('min_price')
-                max_price = request.POST.get('max_price')
-                if not min_overplus:
-                    messages.error(request, '请输入图书余量！')
-                    return redirect('booklist')
-                if min_price and max_price:
-                    books = books.filter(overplus__gte=min_overplus, price__gte=min_price, price__lte=max_price)
-                elif min_price:
-                    books = books.filter(overplus__gte=min_overplus, price__gte=min_price)
-                elif max_price:
-                    books = books.filter(overplus__gte=min_overplus, price__lte=max_price)
-        else:
-            selected_books = request.POST.getlist('selected_books')
-            if len(selected_books) == 0:
-                return redirect('bookManage')
-            book = Book.objects.get(bnum=selected_books[0])
-            return HttpResponseRedirect('/bookEdit/' + book.bnum)
-    return render(request, 'bookManage.html', {'books': books})
-
-def bookEdit(request, bnum):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    book = Book.objects.get(bnum=bnum)
+def login(request):
     if request.method == 'GET':
-        return render(request, 'bookEdit.html', {'book': book})
-    book.btype = request.POST.get('btype', '')
-    book.bname = request.POST.get('name', '')
-    book.price = request.POST.get('price', '')
-    book.overplus = request.POST.get('overplus', '')
-    if int(book.overplus) < 0:
-        messages.error(request, '图书余量不能小于0！')
-        return redirect('/bookEdit/' + bnum)
-    messages.error(request, '修改成功！')
-    book.save()
-    return redirect('bookManage')
-
-def bookAdd(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    if request.method == 'GET':
-        return render(request, 'bookAdd.html')
-    book = Book()
-    book.bnum = request.POST.get('bnum', '')
-    book.btype = request.POST.get('btype', '')
-    book.bname = request.POST.get('name', '')
-    book.price = request.POST.get('price', '')
-    book.overplus = request.POST.get('overplus', '')
-    if int(book.overplus) < 0:
-        messages.error(request, '图书余量不能小于0！')
-        return redirect('/bookAdd')
-    messages.error(request, '创建图书成功！')
-    book.save()
-    return redirect('bookManage')
-
-def bookDelete(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    bnum = request.GET.get('bnum')
-    book = get_object_or_404(Book, bnum=bnum)
-    book.delete()
-    messages.error(request, '删除图书成功！')
-    return redirect('bookManage')
-
-def userOrder(request, num):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    user = User.objects.get(unum=num)
-    orders = Order.objects.filter(unum=user)
-    return render(request, 'userOrder.html', {'orders': orders})
-
-def userReset(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    unum = request.GET.get('unum')
-    user = User.objects.get(unum=unum)
-    user.passwd = getmd5('123456')
-    user.save()
-    messages.error(request, '密码已重置为123456！')
-    return redirect('userManage')
-
-def userManage(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    users = User.objects.all()
-    if request.method == 'POST':
-        selected_users = request.POST.getlist('selected_users')
-        if len(selected_users) == 0:
-            return redirect('userManage')
-        user = selected_users[0]
-        if 'view' in request.POST:
-            return HttpResponseRedirect('userOrder/' + user)
-        if 'edit' in request.POST:
-            return HttpResponseRedirect('userEdit/' + user)
-    return render(request, 'userManage.html', {'users': users})
-
-def userEdit(request, num):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    if request.method == 'POST':
-        name = request.POST.get('name')
-        contact = request.POST.get('contact')
-        address = request.POST.get('address')
-        state = request.POST.get('state') == 'on'
-        user = User.objects.get(unum=num)
-        user.uname = name
-        user.contact = contact
-        user.address = address
-        user.state = state
-        user.save()
-        messages.error(request, '保存成功')
-        return redirect('userManage')
-    
-    user = User.objects.get(unum=num)
-    return render(request, 'userEdit.html', {'user': user})
-
-def userVerify(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    users = User.objects.filter(state=False)
-    if request.method == 'GET':
-        return render(request, 'userVerify.html', {'users': users})
-    selected_users = request.POST.getlist('selected_users')
-    for num in selected_users:
-        user = User.objects.get(unum=num)
-        user.state = True
-        user.save()
-    messages.error(request, '已通过选定用户')
-    return redirect('userManage')
-
-def selfModify(request):
-    if 'state' not in request.COOKIES or request.COOKIES['state'] != 'manager' :
-        return HttpResponseRedirect('/loginManager')
-    manager = Manager.objects.get(mnum=request.COOKIES['user'])
-    if request.method == 'GET':
-        return render(request, 'selfModify.html')
+        return render(request, 'login.html')
+    usr = request.POST.get('usr', '')
     psw = request.POST.get('psw', '')
-    npsw = request.POST.get('npsw', '')
-    npswc = request.POST.get('npswc', '')
-    if getmd5(psw) != manager.passwd:
-        messages.error(request, '原密码输入错误！')
-        return redirect('selfModify')
-    if npsw != npswc:
+    user = ''
+    for x in User.objects.all():
+        if x.uname == usr:
+            user = x
+            break
+    if user == '':
+        messages.error(request, '用户不存在！')
+        return redirect('login')
+    if user.state == False:
+        messages.error(request, '用户注册尚未通过审批！请联系网站管理员。')
+        return redirect('login')
+    psw = getmd5(psw)
+    if user.passwd != psw:
+        messages.error(request, '用户名或密码错误！')
+        return redirect('login')
+    response = HttpResponseRedirect('/')
+    response.set_cookie('user', user.unum)
+    response.set_cookie('state', 'user')
+    return response
+
+def register(request):
+    if request.method == 'GET':
+        return render(request, 'register.html')
+    usr = request.POST.get('usr', '')
+    psw = request.POST.get('psw', '')
+    pswc = request.POST.get('pswc', '')
+    contact = request.POST.get('contact', '')
+    address = request.POST.get('address', '')
+    if psw != pswc:
         messages.error(request, '两次输入的密码不一致！')
-        return redirect('selfModify')
-    if len(npsw) < 6:
+        return redirect('register')
+    if len(psw) < 6:
         messages.error(request, '密码长度至少为6！')
-        return redirect('selfModify')
-    manager.passwd = getmd5(npsw)
-    manager.save()
-    messages.error(request, '修改成功！')
-    return redirect('bookManage')
+        return redirect('register')
+    if usr=='' or psw=='' or address=='':
+        messages.error(request, '请填写所有必填内容！')
+        return redirect('register')
+    lastnum = 0
+    for x in User.objects.all():
+        if usr == x.uname:
+            messages.error(request, '用户名已存在！')
+            return redirect('register')
+        if int(x.unum[1:]) > lastnum:
+            lastnum = int(x.unum[1:])
+    unum = 'U' + str(lastnum + 1).zfill(4)
+    user = User(unum=unum, uname=usr, passwd=getmd5(psw), contact=contact, address=address)
+    user.save()
+    messages.error(request, '注册成功！请等待管理员审批！')
+    return HttpResponseRedirect('/login')
+
+def logout(request):
+    res = HttpResponseRedirect('/login')
+    res.delete_cookie('user')
+    res.delete_cookie('state')
+    return res
+
+def loginManager(request):
+    if request.method == 'GET':
+        return render(request, 'loginManager.html')
+    num = request.POST.get('num', '')
+    psw = request.POST.get('psw', '')
+    user = ''
+    if num == "123456":
+        response = HttpResponseRedirect('/')
+        response.set_cookie('user', "manager")
+        response.set_cookie('state', 'manager')
+    else:
+        for x in Manager.objects.all():
+            if x.mnum == num:
+                user = x
+                break
+
+        if user == '':
+            messages.error(request, '管理员账号不存在！')
+            return redirect('loginManager')
+        psw = getmd5(psw)
+        if user.passwd != psw:
+            messages.error(request, '管理员账号或密码错误！')
+            return redirect('loginManager')
+        response = HttpResponseRedirect('/')
+        response.set_cookie('user', user.mnum)
+        response.set_cookie('state', 'manager')
+    return response
